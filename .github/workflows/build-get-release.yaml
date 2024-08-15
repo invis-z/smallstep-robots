@@ -1,0 +1,73 @@
+---
+name: Build `get-release`
+
+on:
+  push:
+    branches:
+      - workflows
+    paths:
+      - 'get-release/*'
+      - '!get-release/dist/*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install npm and package
+        working-directory: ${{ github.workspace }}/get-release
+        run: |
+          # Install npm, ncc and build
+          npm install
+          npm i -g @vercel/ncc
+          npm run package
+      - name: Push updated ncc build if available
+        run: |
+          # Note: the following account information will not work on GHES
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add get-release/dist/*
+          if ! (git diff -s --staged --exit-code); then
+            git commit -m 'Build `get-release` for ${{ github.sha }}'
+            git push
+          fi
+      - name: Clean old run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPOSITORY='${{ github.repository }}'
+          WORKFLOW_NAME='build-get-release.yaml'
+
+          echo "Getting all completed runs for workflow $WORKFLOW_NAME in $REPOSITORY"
+
+          RUNS=$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/$REPOSITORY/actions/workflows/$WORKFLOW_NAME/runs" \
+              --paginate \
+              --jq '.workflow_runs[] | select(.conclusion != "") | .id'
+          )
+
+          echo "Found $(echo "$RUNS" | wc -l) completed runs for workflow $WORKFLOW_NAME"
+
+          # Delete each run
+          for RUN in $RUNS; do
+            if [[ $RUN == "${{ github.run_id }}" ]]; then
+              echo "Skipping current run $RUN"
+              continue
+            fi
+            echo "Deleting run $RUN"
+            gh api \
+              --silent \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/$REPOSITORY/actions/runs/$RUN" || echo "Failed to delete run $RUN"
+
+            # Sleep for 100ms to avoid rate limiting
+            sleep 0.1
+          done

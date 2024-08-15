@@ -1,0 +1,62 @@
+name: Check Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */2 * * *"
+
+jobs:
+  check-update:
+    name: Check Update
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-upstream-release.outputs.release }}
+      need_update: ${{ steps.newer.outputs.need_update }}
+      prerelease: ${{ steps.get-upstream-release.outputs.prerelease }}
+    steps:
+      - name: Get Upstream release
+        id: get-upstream-release
+        uses: invis-z/smallstep-robots/get-release@workflows
+        with:
+          repository: ${{ vars.UPSTREAM_REPO }}
+          excludes: draft
+      - name: Get latest release
+        id: get-release
+        continue-on-error: true
+        uses: invis-z/smallstep-robots/get-release@workflows
+        with:
+          repository: ${{ vars.TARGET_REPO }}
+          excludes: draft
+      - name: Version is different
+        if: ${{ steps.get-upstream-release.outputs.release != steps.get-release.outputs.release }}
+        id: newer
+        run: |
+          echo need_update=true >> "$GITHUB_OUTPUT"
+
+  patch:
+    name: Patch
+    needs: check-update
+    if: ${{ needs.check-update.outputs.need_update  == 'true' }}
+    uses: invis-z/smallstep-robots/.github/workflows/patch.yaml@workflows
+    secrets: 
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    with:
+      version: ${{ needs.check-update.outputs.version }}
+      prerelease: ${{ needs.check-update.outputs.prerelease == 'true' }}
+      src-repo: ${{ vars.UPSTREAM_REPO }}
+      repo: ${{ vars.TARGET_REPO }}
+      patch-repo: ${{ vars.PATCH_REPO }}
+      patch-ref: ${{ vars.PATCH_REF }}
+      branch: "release"
+
+  build:
+    name: Build
+    needs: [check-update, patch]
+    if: ${{ needs.check-update.outputs.need_update  == 'true' && needs.check-update.outputs.prerelease == 'false' }}
+    uses: invis-z/smallstep-robots/.github/workflows/build.yaml@workflows
+    secrets: 
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      version: ${{ needs.check-update.outputs.version }}
+      repo: ${{ vars.TARGET_REPO }}

@@ -1,0 +1,110 @@
+name: Apply Patches
+
+on:
+  workflow_call:
+    inputs:
+      src-repo:
+        description: "Source repo"
+        required: true
+        type: string
+      version:
+        description: "Version to apply patch"
+        required: true
+        type: string
+      prerelease:
+        description: "Is this a pre-release"
+        required: true
+        type: boolean
+      repo:
+        description: "Target repo"
+        required: true
+        type: string
+      branch:
+        description: "Target branch"
+        required: false
+        type: string
+      patch-repo:
+        description: "Patch repo"
+        required: true
+        type: string
+      patch-ref:
+        description: "Patch ref"
+        required: true
+        type: string
+    secrets:
+      APP_PRIVATE_KEY:
+        required: true
+jobs:
+  patch:
+    name: Apply Patches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.src-repo }}
+          ref: ${{ inputs.version }}
+          fetch-depth: 0
+          path: working
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.patch-repo }}
+          ref: ${{ inputs.patch-ref }}
+          path: patch
+      - name: Split Repo
+        env:
+          REPO: ${{ inputs.repo }}
+        id: split-repo
+        run: |
+            echo "owner=${REPO%%/*}" >> "$GITHUB_OUTPUT"
+            echo "repo=${REPO#*/}" >> "$GITHUB_OUTPUT"
+      - name: Get token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ steps.split-repo.outputs.owner }}
+          repositories: ${{ steps.split-repo.outputs.repo }}
+      - name: Configure Git
+        working-directory: working
+        run: |
+          git config --unset-all http.https://github.com/.extraheader '[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]:' || echo "Unable to unset extraheader."
+          git config --global url."https://api:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://ssh:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://git:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "git@github.com:"
+      - name: Configure Git User
+        working-directory: working
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Apply Patches
+        working-directory: working
+        run: |
+          git remote set-url origin 'https://github.com/${{ inputs.repo }}'
+          find "${{ github.workspace }}/patch/" -type f -iname *.patch -print0 | sort -z | xargs -r0 git am
+          git tag -f ${{ inputs.version }}
+      - name: Push to Branch
+        if: ${{ inputs.branch != '' }}
+        id: push-branch
+        working-directory: working
+        run: |
+          git push --force origin HEAD:refs/heads/${{ inputs.branch }}
+      - name: Push to Tag
+        id: push-tag
+        working-directory: working
+        run: |
+          git push --force origin HEAD:refs/tags/${{ inputs.version }}
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          body: "### Update to `step-ca` ${{ inputs.version }}"
+          repository: ${{ inputs.repo }}
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          draft: false
+          prerelease: ${{ inputs.prerelease }}
