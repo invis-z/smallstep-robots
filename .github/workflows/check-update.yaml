@@ -20,6 +20,7 @@ jobs:
         with:
           repository: ${{ vars.UPSTREAM_REPO }}
           excludes: draft
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Get latest release
         id: get-release
         continue-on-error: true
@@ -27,6 +28,7 @@ jobs:
         with:
           repository: ${{ vars.TARGET_REPO }}
           excludes: draft
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Version is different
         if: ${{ steps.get-upstream-release.outputs.release != steps.get-release.outputs.release }}
         id: newer
