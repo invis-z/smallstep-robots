@@ -25,21 +25,37 @@ jobs:
           npm install
           npm i -g @vercel/ncc
           npm run package
-      - name: Push updated ncc build if available
+      # - name: Push updated ncc build if available
+      #   run: |
+      #     # Note: the following account information will not work on GHES
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      #     git add get-release/dist/*
+      #     if ! (git diff -s --staged --exit-code); then
+      #       git commit -m 'Build `get-release` for ${{ github.sha }}'
+      #       git push
+      #     fi
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
         run: |
-          # Note: the following account information will not work on GHES
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add get-release/dist/*
+          git add get-release/dist/index.js
           if ! (git diff -s --staged --exit-code); then
-            git commit -m 'Build `get-release` for ${{ github.sha }}'
-            git push
+            base64 -w0 get-release/dist/index.js > get-release/dist/index.js.b64
+            gh api graphql \
+              -F githubRepository="${{ github.repository }}" \
+              -F branchName="workflows" \
+              -F expectedHeadOid=${{ github.sha }} \
+              -F commitMessage='Build `get-release` for ${{ github.sha }}' \
+              -F files[][path]="get-release/dist/index.js" -F files[][contents]=@get-release/dist/index.js.b64 \
+              -F 'query=@.github/api/createCommitOnBranch.gql'
           fi
       - name: Clean old run
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          REPOSITORY='${{ github.repository }}'
           WORKFLOW_NAME='build-get-release.yaml'
 
           echo "Getting all completed runs for workflow $WORKFLOW_NAME in $REPOSITORY"
