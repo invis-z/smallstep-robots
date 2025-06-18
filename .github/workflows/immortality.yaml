@@ -1,0 +1,58 @@
+name: Workflow Immortality
+
+on:
+  schedule:
+    # run once a month on the first day of the month at 00:20 UTC
+    - cron: '20 0 1 * *'
+  workflow_dispatch: {}
+
+jobs:
+  keepalive:
+    name: Keep Workflow Alive
+
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Keep cronjob based triggers of GitHub workflows alive
+        uses: PhrozenByte/gh-workflow-immortality@v1
+        with:
+          secret: ${{ secrets.PAT_ACTION_RW }}
+          repos: ${{ github.repository }}
+      - name: Clean old run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          WORKFLOW_NAME='immortality.yaml'
+
+          echo "Getting all completed runs for workflow $WORKFLOW_NAME in $REPOSITORY"
+
+          RUNS=$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/$REPOSITORY/actions/workflows/$WORKFLOW_NAME/runs" \
+              --paginate \
+              --jq '.workflow_runs[] | select(.conclusion != "") | .id'
+          )
+
+          echo "Found $(echo "$RUNS" | wc -l) completed runs for workflow $WORKFLOW_NAME"
+
+          # Delete each run
+          for RUN in $RUNS; do
+            if [[ $RUN == "${{ github.run_id }}" ]]; then
+              echo "Skipping current run $RUN"
+              continue
+            fi
+            echo "Deleting run $RUN"
+            gh api \
+              --silent \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/$REPOSITORY/actions/runs/$RUN" || echo "Failed to delete run $RUN"
+
+            # Sleep for 100ms to avoid rate limiting
+            sleep 0.1
+          done
