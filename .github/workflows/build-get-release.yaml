@@ -2,6 +2,7 @@
 name: Build `get-release`
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - workflows
