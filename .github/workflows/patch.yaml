@@ -46,6 +46,7 @@ jobs:
           ref: ${{ inputs.version }}
           fetch-depth: 0
           path: working
+          persist-credentials: false
       - name: Checkout
         uses: actions/checkout@v6
         with:
