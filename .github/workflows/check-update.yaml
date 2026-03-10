@@ -16,19 +16,43 @@ jobs:
     steps:
       - name: Get Upstream release
         id: get-upstream-release
-        uses: invis-z/smallstep-robots/get-release@workflows
-        with:
-          repository: ${{ vars.UPSTREAM_REPO }}
-          excludes: draft
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ vars.UPSTREAM_REPO }}"
+          
+          # Get the latest non-draft release
+          RELEASE_INFO=$(gh release list \
+            --repo "$REPO" \
+            --exclude-drafts \
+            --limit 1 \
+            --json tagName,isPrerelease,isDraft)
+          
+          RELEASE=$(echo "$RELEASE_INFO" | jq -r '.[0].tagName')
+          PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.[0].isPrerelease')
+          
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
       - name: Get latest release
         id: get-release
         continue-on-error: true
-        uses: invis-z/smallstep-robots/get-release@workflows
-        with:
-          repository: ${{ vars.TARGET_REPO }}
-          excludes: draft
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ vars.TARGET_REPO }}"
+          
+          # Get the latest non-draft release
+          RELEASE_INFO=$(gh release list \
+            --repo "$REPO" \
+            --exclude-drafts \
+            --limit 1 \
+            --json tagName,isPrerelease,isDraft)
+          
+          RELEASE=$(echo "$RELEASE_INFO" | jq -r '.[0].tagName')
+          PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.[0].isPrerelease')
+          
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
       - name: Version is different
         if: ${{ steps.get-upstream-release.outputs.release != steps.get-release.outputs.release }}
         id: newer
