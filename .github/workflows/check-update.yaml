@@ -91,38 +91,23 @@ jobs:
     name: Clean History
     needs: check-update
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     steps:
-      - name: Clean old run
+      - name: Clean old runs
         env:
           GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
         run: |
-          WORKFLOW_NAME='check-update.yaml'
-          JQ_OLD=".workflow_runs[] | select(.created_at | fromdateiso8601 < $(date -d 'last month' +%s)) | .id"
-          
-          echo "Getting all old runs for workflow $WORKFLOW_NAME in $REPOSITORY"
+          WORKFLOW_NAME=$(basename "${GITHUB_WORKFLOW_REF%%@*}")
+          echo "Cleaning old $WORKFLOW_NAME runs"
+          RUNS=$(gh api \
+            "/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_NAME/runs" \
+            --paginate \
+            --jq ".workflow_runs[] | select(.created_at | fromdateiso8601 < $(date -d 'last month' +%s)) | .id")
 
-          RUNS=$(
-            gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/$REPOSITORY/actions/workflows/$WORKFLOW_NAME/runs" \
-              --paginate \
-              --jq "$JQ_OLD"
-          )
-
-          echo "Found $(echo "$RUNS" | wc -l) old runs for workflow $WORKFLOW_NAME"
-
-          # Delete each run
           for RUN in $RUNS; do
             echo "Deleting run $RUN"
-            gh api \
-              --silent \
-              --method DELETE \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/$REPOSITORY/actions/runs/$RUN" || echo "Failed to delete run $RUN"
-
-            # Sleep for 100ms to avoid rate limiting
+            gh api --silent --method DELETE \
+              "/repos/${{ github.repository }}/actions/runs/$RUN" || true
             sleep 0.1
           done
