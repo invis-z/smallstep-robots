@@ -9,16 +9,21 @@ on:
 jobs:
   keepalive:
     name: Keep Workflow Alive
-
     runs-on: ubuntu-latest
     permissions: {}
-
     steps:
       - name: Keep cronjob based triggers of GitHub workflows alive
         uses: PhrozenByte/gh-workflow-immortality@v1
         with:
           secret: ${{ secrets.PAT_ACTION_RW }}
           repos: ${{ github.repository }}
+
+  clean-runs:
+    name: Clean Old Runs
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
       - name: Clean old runs
         env:
           GH_TOKEN: ${{ github.token }}
