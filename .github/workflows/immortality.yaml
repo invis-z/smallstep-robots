@@ -20,6 +20,7 @@ jobs:
 
   clean-runs:
     name: Clean Old Runs
+    needs: keepalive
     runs-on: ubuntu-latest
     permissions:
       actions: write
