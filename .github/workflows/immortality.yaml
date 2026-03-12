@@ -30,17 +30,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           WORKFLOW_NAME=$(basename "${GITHUB_WORKFLOW_REF%%@*}")
-          RUNS=$(gh api \
-            "/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_NAME/runs" \
-            --paginate \
-            --jq '.workflow_runs[] | select(.conclusion != "") | .id')
+          RUNS=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow "$WORKFLOW_NAME" \
+            --limit 2000 \
+            --json databaseId,conclusion \
+            --jq '.[] | select(.conclusion != null and .conclusion != "") | .databaseId')
 
           for RUN in $RUNS; do
             if [[ $RUN == "${{ github.run_id }}" ]]; then
               continue
             fi
             echo "Deleting run $RUN"
-            gh api --silent --method DELETE \
-              "/repos/${{ github.repository }}/actions/runs/$RUN" || true
+            gh run delete "$RUN" \
+              --repo "${{ github.repository }}"
             sleep 0.1
           done
