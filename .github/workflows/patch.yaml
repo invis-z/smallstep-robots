@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.src-repo }}
           ref: ${{ inputs.version }}
@@ -48,7 +48,7 @@ jobs:
           path: working
           persist-credentials: false
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.patch-repo }}
           ref: ${{ inputs.patch-ref }}
